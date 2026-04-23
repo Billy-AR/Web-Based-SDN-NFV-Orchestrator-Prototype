@@ -80,37 +80,33 @@ Catatan penting: backend tetap lokal dan harus dijalankan dengan sudo, karena ba
 - backend lokal
 - mininet/openvswitch lokal
 
-Proyek ini untuk apa
+## Proyek Ini Untuk Apa
 
-  Fungsinya buat demonstrasi 4 hal:
+Fungsinya buat demonstrasi 4 hal:
 
-  - menyalakan topologi jaringan virtual dengan Mininet/Open vSwitch
-  - menghubungkan switch ke Ryu SDN controller
-  - menjalankan operasi deploy/stop VNF via Docker
-  - menerapkan policy/service chain seperti direct, firewall, ids, firewall_then_ids, lalu
-    memantau statusnya
+- menyalakan topologi jaringan virtual dengan Mininet/Open vSwitch
+- menghubungkan switch ke Ryu SDN controller
+- menjalankan operasi deploy/stop VNF via Docker
+- menerapkan policy/service chain seperti `direct`, `firewall`, `ids`, dan `firewall_then_ids`, lalu memantau statusnya
 
-  Policy-policy itu didefinisikan di backend/services/ryu_service.py:21, misalnya path h1 ->
-  s1 -> fw -> s1 -> s2 -> h2.
+Policy-policy itu didefinisikan di `backend/services/ryu_service.py:21`, misalnya path `h1 -> s1 -> fw -> s1 -> s2 -> h2`.
 
-  Cara kerjanya
+## Cara Kerjanya
 
-  1. Controller
-     Ryu jalan sebagai OpenFlow controller. Aplikasi controllernya ada di controller/
-     ryu_app.py:1. Dasarnya adalah simple learning switch, lalu backend memakai REST API Ryu
-     untuk tambah/hapus flow.
-  2. Topology/Data Plane
-     Saat user klik start topology, backend memanggil backend/services/
-     h1 - s1 - s2 - h2
-     plus cabang ke fw, ids, dan lb di s1 (mininet/topo.py:96).
-  3. Orchestration
-     Backend Flask jadi “otak” yang expose endpoint seperti:
-     /api/topology/start, /api/vnf/deploy, /api/policy/apply, /api/stats
-     di backend/app.py:60.
-  4. Apply policy
-      - minta backend/services/ryu_service.py:225 untuk install flow OpenFlow
-      - simpan event, incident, dan status policy aktif
-  5. Monitoring dan recovery
-     Backend juga punya health check sederhana. Kalau VNF yang dibutuhkan mati, orchestrator
-     bisa fallback ke direct dan mencatat incident di backend/services/
-     orchestrator_service.py:220.
+1. **Controller**  
+   Ryu jalan sebagai OpenFlow controller. Aplikasi controllernya ada di `controller/ryu_app.py:1`. Dasarnya adalah simple learning switch, lalu backend memakai REST API Ryu untuk tambah/hapus flow.
+
+2. **Topology/Data Plane**  
+   Saat user klik start topology, backend memanggil service topology untuk menjalankan fabric virtual di `mininet/topo.py:62`. Topologinya adalah `h1 -> s1 -> s2 -> h2`, plus cabang ke `fw`, `ids`, dan `lb` di `s1` (`mininet/topo.py:96`).
+
+3. **Orchestration**  
+   Backend Flask jadi "otak" yang expose endpoint seperti `/api/topology/start`, `/api/vnf/deploy`, `/api/policy/apply`, dan `/api/stats` di `backend/app.py:60`.
+
+4. **Apply policy**  
+   Saat policy diterapkan, backend akan:
+
+   - meminta `backend/services/ryu_service.py:225` untuk install flow OpenFlow
+   - menyimpan event, incident, dan status policy aktif
+
+5. **Monitoring dan recovery**  
+   Backend juga punya health check sederhana. Kalau VNF yang dibutuhkan mati, orchestrator bisa fallback ke `direct` dan mencatat incident di `backend/services/orchestrator_service.py:220`.
