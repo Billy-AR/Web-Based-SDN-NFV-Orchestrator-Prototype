@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # mininet/topo.py
 
+import os
 import sys
 import time
 from mininet.net import Mininet
@@ -15,9 +16,41 @@ try:
 except ImportError:
     USE_CONTAINERNET = False
 
-STATUS_FILE = '/tmp/mininet_status.txt'
+RUNTIME_DIR_ENV = 'ORCHESTRATOR_RUNTIME_DIR'
+DEFAULT_RUNTIME_DIR = os.path.join(
+    '/tmp',
+    f'web-sdn-nfv-orchestrator-uid-{os.getuid()}'
+)
 
-def is_ryu_available(host='127.0.0.1', port=6653, timeout=2):
+
+def _get_runtime_dir():
+    return os.getenv(RUNTIME_DIR_ENV, DEFAULT_RUNTIME_DIR)
+
+
+STATUS_FILE = os.path.join(_get_runtime_dir(), 'mininet_status.txt')
+
+def _env_int(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+def get_controller_config():
+    mode = (os.getenv('SDN_CONTROLLER_MODE', 'local') or 'local').strip().lower()
+    if mode not in {'local', 'docker'}:
+        mode = 'local'
+
+    host = (os.getenv('SDN_CONTROLLER_HOST', '127.0.0.1') or '').strip() or '127.0.0.1'
+    port = _env_int('SDN_CONTROLLER_OF_PORT', 6653)
+
+    return {
+        'mode': mode,
+        'mode_label': 'Docker' if mode == 'docker' else 'Local',
+        'host': host,
+        'port': port,
+    }
+
+def is_ryu_available(host, port, timeout=2):
     """Check if Ryu controller is reachable before starting."""
     try:
         sock = socket.create_connection((host, port), timeout=timeout)
@@ -27,8 +60,11 @@ def is_ryu_available(host='127.0.0.1', port=6653, timeout=2):
         return False
 
 def create_topology():
+    os.makedirs(_get_runtime_dir(), mode=0o700, exist_ok=True)
+
     # Decide which controller to use
-    ryu_available = is_ryu_available()
+    controller_config = get_controller_config()
+    ryu_available = is_ryu_available(controller_config['host'], controller_config['port'])
 
     if USE_CONTAINERNET:
         net = Containernet(switch=OVSKernelSwitch)
@@ -37,8 +73,16 @@ def create_topology():
 
     info('*** Adding controller\n')
     if ryu_available:
-        info('*** Ryu Controller detected at 127.0.0.1:6653\n')
-        c0 = net.addController('c0', controller=RemoteController, ip='127.0.0.1', port=6653)
+        info(
+            f"*** {controller_config['mode_label']} Ryu controller detected at "
+            f"{controller_config['host']}:{controller_config['port']}\n"
+        )
+        c0 = net.addController(
+            'c0',
+            controller=RemoteController,
+            ip=controller_config['host'],
+            port=controller_config['port']
+        )
     else:
         info('*** Ryu not detected. Switches will run in standalone (self-learning) mode.\n')
         c0 = None  # No controller needed in standalone mode
@@ -53,12 +97,16 @@ def create_topology():
     h1 = net.addHost('h1', ip='10.0.0.1/24', mac='00:00:00:00:00:01')
     h2 = net.addHost('h2', ip='10.0.0.2/24', mac='00:00:00:00:00:02')
     fw = net.addHost('fw', ip='10.0.0.254/24', mac='00:00:00:00:00:FE')
+    ids = net.addHost('ids', ip='10.0.0.253/24', mac='00:00:00:00:00:FD')
+    lb = net.addHost('lb', ip='10.0.0.252/24', mac='00:00:00:00:00:FC')
 
     info('*** Creating links\n')
     net.addLink(h1, s1)
     net.addLink(s1, s2)
     net.addLink(s2, h2)
-    net.addLink(s1, fw)  # Firewall attached to s1
+    net.addLink(s1, fw)
+    net.addLink(s1, ids)
+    net.addLink(s1, lb)
 
     info('*** Starting network\n')
     net.start()
@@ -78,7 +126,11 @@ def create_topology():
         f.write("RUNNING\n")
         f.write(f"Hosts: {len(net.hosts)}\n")
         f.write(f"Switches: {len(net.switches)}\n")
-        f.write(f"Controller: {'Ryu (Remote)' if ryu_available else 'OVSController (Fallback)'}\n")
+        if ryu_available:
+            f.write(f"Controller: Ryu ({controller_config['mode_label']})\n")
+            f.write(f"Controller Endpoint: {controller_config['host']}:{controller_config['port']}\n")
+        else:
+            f.write("Controller: OVSController (Fallback)\n")
         f.write(f"Containernet: {USE_CONTAINERNET}\n")
 
     info('*** Topology is UP. Waiting for stop signal (press Ctrl+C or use Stop button)...\n')
@@ -97,4 +149,3 @@ def create_topology():
 if __name__ == '__main__':
     setLogLevel('info')
     create_topology()
-

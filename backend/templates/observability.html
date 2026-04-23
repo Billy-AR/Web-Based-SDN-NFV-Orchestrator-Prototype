@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="content-grid">
+    <div class="glass-card span-8">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Traffic</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Policy counters and path playback for current traffic.">i</button>
+            </div>
+            <span id="policy-status-badge" class="badge-pill badge-stopped"><span class="pulse pulse-red"></span> Idle</span>
+        </div>
+        <div class="card-body">
+            <div class="observatory-grid">
+                <div class="observatory-panel">
+                    <div class="metric-card">
+                        <span class="metric-label">Active Policy</span>
+                        <span class="metric-value" id="active-policy-label">None</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Observed Packets</span>
+                        <span class="metric-value" id="observed-packets">0</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Observed Bytes</span>
+                        <span class="metric-value" id="observed-bytes">0 B</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Policy Rules</span>
+                        <span class="metric-value" id="observed-rules">0</span>
+                    </div>
+                </div>
+
+                <div class="playback-panel">
+                    <div class="path-pills" id="path-pill-list"></div>
+                    <div class="playback-track" id="playback-track">
+                        <div class="playback-packet" id="playback-packet">PKT</div>
+                    </div>
+                    <div class="inline-note">
+                        <span class="info-dot" aria-hidden="true">i</span>
+                        <span class="observatory-footnote" id="observatory-footnote">Playback follows the selected service path.</span>
+                    </div>
+                    <div class="path-summary path-summary-inline" id="flow-path-indicator">
+                        <span class="badge-pill badge-info" id="flow-path-text">Waiting for active policy...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card span-4">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Incidents</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Most recent orchestrator warnings and critical events.">i</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="incident-wrap" id="incident-list">
+                <div class="text-muted small">No incidents detected yet.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card span-12">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Log</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Chronological runtime events from the orchestrator.">i</button>
+            </div>
+            <button class="btn-ctrl btn-ctrl-ghost" style="width:auto; padding:.45rem .85rem;" onclick="document.getElementById('log-container').innerHTML=''">Clear</button>
+        </div>
+        <div class="card-body log-card-body">
+            <div class="log-wrap" id="log-container"></div>
+        </div>
+    </div>
+</section>
+{% endblock %}

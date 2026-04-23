@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="content-grid">
+    <div class="glass-card span-8 topology-panel">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Topology</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Fabric view with active switches, links, and chained VNFs.">i</button>
+            </div>
+            <span id="badge-topo" class="badge-pill badge-stopped">
+                <span class="pulse pulse-red" id="dot-topo"></span>
+                <span id="badge-topo-text">Stopped</span>
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="topo-canvas">
+                <div class="topo-row">
+                    <div class="topo-node" id="node-h1">
+                        <div class="topo-icon">H1</div>
+                        <div class="topo-node-label">Client Edge</div>
+                        <div class="topo-node-ip">10.0.0.1</div>
+                    </div>
+                    <div class="topo-link" id="link-1"></div>
+                    <div class="topo-node topo-node-core" id="node-s1">
+                        <div class="topo-icon">S1</div>
+                        <div class="topo-node-label">Ingress Switch</div>
+                        <div class="topo-node-ip">OVS · dpid:1</div>
+                        <div class="topo-vnf-grid">
+                            <div class="topo-vnf-branch" id="branch-fw">
+                                <div class="topo-vnf-line" id="branch-line-fw"></div>
+                                <div class="topo-node topo-vnf-node" id="node-fw">
+                                    <div class="topo-icon topo-icon-fw">FW</div>
+                                    <div class="topo-node-label">Firewall</div>
+                                    <div class="topo-node-ip">10.0.0.254</div>
+                                </div>
+                            </div>
+                            <div class="topo-vnf-branch" id="branch-ids">
+                                <div class="topo-vnf-line" id="branch-line-ids"></div>
+                                <div class="topo-node topo-vnf-node" id="node-ids">
+                                    <div class="topo-icon topo-icon-ids">IDS</div>
+                                    <div class="topo-node-label">Detection</div>
+                                    <div class="topo-node-ip">10.0.0.253</div>
+                                </div>
+                            </div>
+                            <div class="topo-vnf-branch" id="branch-lb">
+                                <div class="topo-vnf-line" id="branch-line-lb"></div>
+                                <div class="topo-node topo-vnf-node" id="node-lb">
+                                    <div class="topo-icon topo-icon-lb">LB</div>
+                                    <div class="topo-node-label">Balancer</div>
+                                    <div class="topo-node-ip">10.0.0.252</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="topo-link" id="link-2"></div>
+                    <div class="topo-node topo-node-core" id="node-s2">
+                        <div class="topo-icon">S2</div>
+                        <div class="topo-node-label">Egress Switch</div>
+                        <div class="topo-node-ip">OVS · dpid:2</div>
+                    </div>
+                    <div class="topo-link" id="link-3"></div>
+                    <div class="topo-node" id="node-h2">
+                        <div class="topo-icon">H2</div>
+                        <div class="topo-node-label">Application Host</div>
+                        <div class="topo-node-ip">10.0.0.2</div>
+                    </div>
+                </div>
+            </div>
+            <div class="inline-note">
+                <span class="info-dot" aria-hidden="true">i</span>
+                <span class="topology-caption">Highlighted nodes belong to the active path.</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card span-4">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Path</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Current service-chain state and active path hops.">i</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="inline-note">
+                <span class="info-dot" aria-hidden="true">i</span>
+                <span id="status-hint" class="status-hint">Start topology, deploy VNFs, then apply a chain.</span>
+            </div>
+            <div class="path-summary path-summary-inline" id="flow-path-indicator">
+                <span class="badge-pill badge-info" id="flow-path-text">Waiting for active policy...</span>
+            </div>
+            <div class="path-pills path-pills-spaced" id="path-pill-list"></div>
+        </div>
+    </div>
+
+    <div class="glass-card span-8">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Controls</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Start and stop topology, deploy VNFs, and apply policies.">i</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="control-layout">
+                <div class="control-block">
+                    <div class="panel-title-row panel-title-row-tight">
+                        <div class="control-title">Topology</div>
+                        <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Boot or stop the Mininet fabric.">i</button>
+                    </div>
+                    <div class="control-stack">
+                        <button id="btn-start-topo" class="btn-ctrl btn-ctrl-primary control-btn">Start Topology</button>
+                        <button id="btn-stop-topo" class="btn-ctrl btn-ctrl-danger control-btn">Stop Topology</button>
+                    </div>
+                </div>
+
+                <div class="control-block">
+                    <div class="panel-title-row panel-title-row-tight">
+                        <div class="control-title">VNFs</div>
+                        <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Deploy service functions into the ingress branch.">i</button>
+                    </div>
+                    <div class="control-stack">
+                        <button id="btn-deploy-fw" class="btn-ctrl btn-ctrl-green control-btn">Deploy Firewall</button>
+                        <button id="btn-deploy-ids" class="btn-ctrl btn-ctrl-green control-btn">Deploy IDS</button>
+                        <button id="btn-deploy-lb" class="btn-ctrl btn-ctrl-green control-btn">Deploy Load Balancer</button>
+                    </div>
+                </div>
+
+                <div class="control-block control-block-policy">
+                    <div class="panel-title-row panel-title-row-tight">
+                        <div class="control-title">Policy</div>
+                        <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Select a chain and apply it through the controller.">i</button>
+                    </div>
+                    <div class="policy-form">
+                        <label class="form-label-lite" for="policy-select">Service Chain</label>
+                        <select id="policy-select" class="select-lite control-btn">
+                            <option value="direct">Direct Path</option>
+                        </select>
+                        <div class="policy-source-target">Traffic lane: h1 → h2</div>
+                        <button id="btn-apply-policy" class="btn-ctrl btn-ctrl-yellow control-btn">Apply Selected Policy</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card span-4">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Scenarios</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Failure injection and recovery actions for orchestration demos.">i</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="scenario-stack">
+                <button id="btn-scenario-kill" class="btn-ctrl btn-ctrl-danger control-btn">Kill Active VNF</button>
+                <button id="btn-scenario-fallback" class="btn-ctrl btn-ctrl-yellow control-btn">Force Direct Fallback</button>
+                <button id="btn-scenario-recover" class="btn-ctrl btn-ctrl-primary control-btn">Recover Last Policy</button>
+            </div>
+            <div class="div-line"></div>
+            <div class="inline-note">
+                <span class="info-dot" aria-hidden="true">i</span>
+                <span class="scenario-note" id="scenario-note">Failure injection and recovery status.</span>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

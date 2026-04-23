@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="content-grid">
+    <div class="glass-card span-8">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Runtime</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Current topology, controller, flows, and VNF counts.">i</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="kpi-grid">
+                <div class="kpi-box" style="--kpi-accent: #31c5f4;">
+                    <div class="kpi-label">Topology</div>
+                    <div class="kpi-value" id="kpi-topo-status">OFF</div>
+                    <div class="kpi-sub" id="kpi-topo-detail">—</div>
+                    <div class="kpi-icon">FABRIC</div>
+                </div>
+                <div class="kpi-box" style="--kpi-accent: #5af0b1;">
+                    <div class="kpi-label">SDN Controller</div>
+                    <div class="kpi-value" id="kpi-ctrl-value">—</div>
+                    <div class="kpi-sub" id="kpi-ctrl-sub">{{ controller_config.name }} · {{ controller_config.mode_label }}</div>
+                    <div class="kpi-icon">CTRL</div>
+                </div>
+                <div class="kpi-box" style="--kpi-accent: #ffb84d;">
+                    <div class="kpi-label">Active Flows</div>
+                    <div class="kpi-value" id="kpi-flows">0</div>
+                    <div class="kpi-sub" id="kpi-flow-caption">Policy flow rules installed</div>
+                    <div class="kpi-icon">FLOW</div>
+                </div>
+                <div class="kpi-box" style="--kpi-accent: #74a5ff;">
+                    <div class="kpi-label">Running VNFs</div>
+                    <div class="kpi-value" id="kpi-vnfs">0</div>
+                    <div class="kpi-sub" id="kpi-vnfs-caption">Containers active</div>
+                    <div class="kpi-icon">VNF</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card span-4">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Path</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Selected policy and current service chain.">i</button>
+            </div>
+            <span id="policy-status-badge" class="badge-pill badge-stopped"><span class="pulse pulse-red"></span> Idle</span>
+        </div>
+        <div class="card-body">
+            <div class="metric-card">
+                <span class="metric-label">Selected Policy</span>
+                <span class="metric-value" id="active-policy-label">None</span>
+            </div>
+            <div class="div-line"></div>
+            <div class="inline-note">
+                <span class="info-dot" aria-hidden="true">i</span>
+                <span id="status-hint" class="status-hint">Start topology, deploy VNFs, then apply a chain.</span>
+            </div>
+            <div class="path-summary path-summary-inline" id="flow-path-indicator">
+                <span class="badge-pill badge-info" id="flow-path-text">Waiting for active policy...</span>
+            </div>
+            <div class="path-pills path-pills-spaced" id="path-pill-list"></div>
+        </div>
+    </div>
+
+    <div class="glass-card span-6">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Controller</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Configured controller endpoints and connected switch state.">i</button>
+            </div>
+            <span id="ctrl-live-badge" class="badge-pill badge-stopped"><span class="pulse pulse-red"></span> Offline</span>
+        </div>
+        <div class="card-body">
+            <div class="info-row">
+                <span class="info-key">Controller</span>
+                <span class="info-val" id="ctrl-controller-name">{{ controller_config.name }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">Mode</span>
+                <span class="info-val" id="ctrl-mode">{{ controller_config.mode_label }} mode</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">REST API</span>
+                <span class="info-val" id="ctrl-rest-api">{{ controller_config.rest_api }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">OpenFlow</span>
+                <span class="info-val" id="ctrl-openflow">{{ controller_config.openflow_endpoint }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">Switches</span>
+                <span class="info-val" id="ctrl-switches">0 connected</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">Flow Rules</span>
+                <span class="info-val" id="ctrl-flows">0</span>
+            </div>
+            <div class="div-line"></div>
+            <button class="btn-ctrl btn-ctrl-ghost" data-bs-toggle="modal" data-bs-target="#flowModal">
+                View OpenFlow Table
+            </button>
+        </div>
+    </div>
+
+    <div class="glass-card span-6">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Traffic</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Packet, byte, and rule counters from the active path.">i</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="observatory-panel">
+                <div class="metric-card">
+                    <span class="metric-label">Observed Packets</span>
+                    <span class="metric-value" id="observed-packets">0</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-label">Observed Bytes</span>
+                    <span class="metric-value" id="observed-bytes">0 B</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-label">Policy Rules</span>
+                    <span class="metric-value" id="observed-rules">0</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-label">Playback</span>
+                    <span class="metric-value">Live</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card span-12">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Playback</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Path animation and recent incidents for the active chain.">i</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="observatory-grid">
+                <div class="playback-panel">
+                    <div class="playback-track" id="playback-track">
+                        <div class="playback-packet" id="playback-packet">PKT</div>
+                    </div>
+                    <div class="inline-note">
+                        <span class="info-dot" aria-hidden="true">i</span>
+                        <span class="observatory-footnote" id="observatory-footnote">Playback follows the selected service path.</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="incident-wrap" id="incident-list">
+                        <div class="text-muted small">No incidents detected yet.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

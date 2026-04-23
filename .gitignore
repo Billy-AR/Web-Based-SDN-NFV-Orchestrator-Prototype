@@ -20,3 +20,6 @@ Thumbs.db
 # Project specific
 backend/venv/
 controller/.venv/
+
+# documentation
+AGENTS.md

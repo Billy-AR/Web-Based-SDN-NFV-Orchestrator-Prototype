@@ -1,0 +1,10 @@
+services:
+  sdn-ryu-controller:
+    build:
+      context: ./controller
+    container_name: sdn-ryu-controller
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"

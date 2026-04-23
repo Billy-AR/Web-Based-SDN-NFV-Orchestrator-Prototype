@@ -65,13 +65,19 @@ sudo service docker start
 *(Cek dengan `sudo docker ps`. Jika tidak error, artinya Docker siap).*
 
 ### Langkah 3: Menginstal Dependensi Python
-Arahkan terminal ke folder `backend` proyek ini, lalu instal dependensi:
+Arahkan terminal ke root proyek, buat virtual environment, lalu instal dependensi backend:
 ```bash
-cd backend/
-pip3 install -r requirements.txt --break-system-packages
+cd /home/thekingsman/Web-Based-SDN-NFV-Orchestrator-Prototype
+python3 -m venv .venv
+./.venv/bin/pip install -r backend/requirements.txt
 ```
+Dengan cara ini backend bisa dijalankan lewat `sudo` tanpa kehilangan dependency Python.
 
 ### Langkah 4: Menjalankan SDN Controller (Terminal 1)
+Proyek sekarang mendukung 2 mode controller:
+
+**Opsi A - Local Host (default)**
+
 Buka terminal baru (atau *tab* baru). Masuk ke folder `controller` dan jalankan Ryu Controller:
 ```bash
 cd controller/
@@ -79,13 +85,70 @@ cd controller/
 ```
 *Tunggu hingga muncul pesan `SDN Controller Started. Waiting for switches...` lalu biarkan terminal ini tetap terbuka.*
 
-### Langkah 5: Menjalankan Orchestrator Web (Terminal 2)
-Di terminal yang lain, masuk ke folder `backend` dan jalankan Flask. **Wajib menggunakan `sudo`** karena Flask butuh akses *root* untuk memanipulasi *Network Namespace* dan Docker.
+**Opsi B - Docker Container**
+
+Mode ini cocok jika instalasi `ryu` lokal bermasalah. Build image lalu jalankan container dengan host networking agar endpoint tetap konsisten:
 ```bash
-cd backend/
-sudo python3 app.py
+cd controller/
+docker build -t sdn-ryu-controller .
+docker run --rm --name sdn-ryu-controller --network host sdn-ryu-controller
+```
+
+Atau langsung dari root project memakai Docker Compose:
+```bash
+cd /home/thekingsman/Web-Based-SDN-NFV-Orchestrator-Prototype
+docker compose up --build -d sdn-ryu-controller
+```
+Jika container bernama `sdn-ryu-controller` aktif, backend akan mendeteksi mode `Docker` secara otomatis untuk tampilan dashboard.
+
+Untuk melihat log controller:
+```bash
+docker compose logs -f sdn-ryu-controller
+```
+
+Untuk menghentikannya:
+```bash
+docker compose stop sdn-ryu-controller
+```
+
+Jika controller Docker dijalankan dengan endpoint selain `127.0.0.1`, export konfigurasi ini sebelum menjalankan backend:
+```bash
+export SDN_CONTROLLER_MODE=docker
+export SDN_CONTROLLER_HOST=<host-atau-ip-controller>
+export SDN_CONTROLLER_REST_PORT=8080
+export SDN_CONTROLLER_OF_PORT=6653
+```
+Lalu jalankan backend dengan `sudo -E` agar environment variable tetap diteruskan.
+
+### Langkah 5: Menjalankan Orchestrator Web (Terminal 2)
+Di terminal yang lain, masuk ke folder `backend` dan jalankan Flask memakai interpreter dari `.venv`. **Wajib menggunakan `sudo`** karena Flask butuh akses *root* untuk memanipulasi *Network Namespace* dan Docker.
+```bash
+cd /home/thekingsman/Web-Based-SDN-NFV-Orchestrator-Prototype/backend
+sudo /home/thekingsman/Web-Based-SDN-NFV-Orchestrator-Prototype/.venv/bin/python app.py
 ```
 *Server akan berjalan di port 5000.*
+
+Jika memakai konfigurasi controller non-default dari environment variable, gunakan:
+```bash
+cd /home/thekingsman/Web-Based-SDN-NFV-Orchestrator-Prototype/backend
+sudo -E /home/thekingsman/Web-Based-SDN-NFV-Orchestrator-Prototype/.venv/bin/python app.py
+```
+
+> [!TIP]
+> `mininet/topo.py` dan backend sekarang membaca konfigurasi controller dari environment variable yang sama, sehingga mode `local` dan `docker` memakai source code yang sama tanpa perlu edit manual file Python.
+
+> [!IMPORTANT]
+> Jika backend dijalankan tanpa `sudo`, endpoint topology akan ditolak lebih awal dengan pesan bahwa operasi Mininet memerlukan hak akses root. Ini memang disengaja agar error-nya jelas dan tidak menunggu crash dari proses `mn`.
+
+### Jalur Cepat: Controller Docker + Backend Lokal
+Kalau Anda ingin jalur yang paling stabil berdasarkan pengujian repo ini, pakai kombinasi berikut:
+```bash
+cd /home/thekingsman/Web-Based-SDN-NFV-Orchestrator-Prototype
+docker compose up --build -d sdn-ryu-controller
+
+cd /home/thekingsman/Web-Based-SDN-NFV-Orchestrator-Prototype/backend
+sudo /home/thekingsman/Web-Based-SDN-NFV-Orchestrator-Prototype/.venv/bin/python app.py
+```
 
 ### Langkah 6: Skenario Live Demo untuk Dosen / Presentasi
 1. Buka Web Browser, masuk ke alamat: **`http://localhost:5000`**

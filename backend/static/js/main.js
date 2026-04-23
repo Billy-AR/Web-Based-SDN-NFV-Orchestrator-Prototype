@@ -1,20 +1,53 @@
-// ── SDN + NFV Orchestrator — main.js ──
+let lastServerEventId = 0;
 
-// ── Clock ──
-function updateClock() {
-    document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB');
+function byId(id) {
+    return document.getElementById(id);
 }
-setInterval(updateClock, 1000);
-updateClock();
 
-// ── Log ──
-function addLog(message, type = 'default') {
-    const container = document.getElementById('log-container');
-    const time = new Date().toLocaleTimeString('en-GB');
+function setText(id, value) {
+    const el = byId(id);
+    if (el) el.innerText = value;
+    return el;
+}
+
+function setHtml(id, value) {
+    const el = byId(id);
+    if (el) el.innerHTML = value;
+    return el;
+}
+
+function bindIfPresent(id, eventName, handler) {
+    const el = byId(id);
+    if (el) el.addEventListener(eventName, handler);
+}
+
+function initTooltips() {
+    if (typeof bootstrap === 'undefined') return;
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        bootstrap.Tooltip.getOrCreateInstance(el);
+    });
+}
+
+function updateClock() {
+    const clock = byId('clock');
+    if (clock) clock.innerText = new Date().toLocaleTimeString('en-GB');
+}
+
+if (byId('clock')) {
+    setInterval(updateClock, 1000);
+    updateClock();
+}
+
+function addLog(message, type = 'default', timeOverride = null) {
+    const container = byId('log-container');
+    if (!container) return;
+
+    const time = timeOverride || new Date().toLocaleTimeString('en-GB');
     const cls = {
         success: 'log-text-success',
-        error:   'log-text-error',
-        info:    'log-text-info',
+        error: 'log-text-error',
+        warning: 'log-text-error',
+        info: 'log-text-info',
         default: 'log-text-default'
     }[type] || 'log-text-default';
 
@@ -24,7 +57,17 @@ function addLog(message, type = 'default') {
     container.prepend(entry);
 }
 
-// ── Loading State ──
+function syncServerEvents(events = []) {
+    const newEvents = [...events]
+        .filter(event => event.id > lastServerEventId)
+        .sort((a, b) => a.id - b.id);
+
+    newEvents.forEach(event => {
+        addLog(event.message, event.level || 'info', event.time_label);
+        lastServerEventId = Math.max(lastServerEventId, event.id);
+    });
+}
+
 function setLoading(loading) {
     document.querySelectorAll('.control-btn').forEach(btn => {
         btn.disabled = loading;
@@ -33,194 +76,433 @@ function setLoading(loading) {
 }
 
 function setHint(msg) {
-    document.getElementById('status-hint').innerText = msg;
+    setText('status-hint', msg);
 }
 
-// ── Button Actions ──
-document.getElementById('btn-start-topo').addEventListener('click', async () => {
-    setLoading(true);
-    setHint('⏳ Starting Mininet topology, please wait...');
-    addLog('Requesting topology start...', 'info');
-    const res  = await fetch('/api/topology/start', { method: 'POST' });
-    const data = await res.json();
-    const ok   = data.status === 'success';
-    addLog(data.message, ok ? 'success' : 'error');
-    setHint(ok ? '✅ Topology running. You can now Deploy Firewall.' : `❌ Error: ${data.message}`);
-    await fetchStats();
-    setLoading(false);
-});
+function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 
-document.getElementById('btn-stop-topo').addEventListener('click', async () => {
-    setLoading(true);
-    setHint('⏳ Stopping topology...');
-    addLog('Requesting topology stop...', 'info');
-    const res  = await fetch('/api/topology/stop', { method: 'POST' });
-    const data = await res.json();
-    addLog(data.message, data.status === 'success' ? 'success' : 'error');
-    setHint('Topology stopped. Press Start Topology to restart.');
-    await fetchStats();
-    setLoading(false);
-});
-
-document.getElementById('btn-deploy-fw').addEventListener('click', async () => {
-    setLoading(true);
-    setHint('⏳ Deploying Firewall VNF container...');
-    addLog('Deploying Firewall VNF...', 'info');
-    const res  = await fetch('/api/vnf/deploy', {
+async function postJson(url, payload = {}) {
+    const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'fw', role: 'firewall' })
+        body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    const ok   = data.status === 'success';
-    addLog(data.message, ok ? 'success' : 'error');
-    setHint(ok ? '✅ Firewall deployed. Install redirect flow to chain traffic.' : `❌ ${data.message}`);
-    await fetchStats();
-    setLoading(false);
-});
+    return res.json();
+}
 
-document.getElementById('btn-install-flow').addEventListener('click', async () => {
-    setLoading(true);
-    setHint('⏳ Injecting OpenFlow rules into switches...');
-    addLog('Installing redirect flow rules via Ryu REST API...', 'info');
-    const res  = await fetch('/api/flow/install', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'redirect_firewall' })
-    });
-    const data = await res.json();
-    const ok   = data.status === 'success';
-    addLog(data.message, ok ? 'success' : 'error');
-    setHint(ok ? '✅ Service chaining active. Traffic now routed through Firewall VNF.' : `❌ ${data.message}`);
-    setLoading(false);
-    await fetchStats();
-});
+function renderPathPills(path = []) {
+    const container = byId('path-pill-list');
+    if (!container) return;
 
-// ── Stats Polling ──
-async function fetchStats() {
-    try {
-        const res  = await fetch('/api/stats');
-        const data = await res.json();
-        updateUI(data);
-    } catch (e) {
-        console.warn('Stats fetch failed:', e);
+    if (!path.length) {
+        container.innerHTML = '<span class="path-pill">No active path</span>';
+        return;
     }
+
+    container.innerHTML = path.map((hop, index) => `
+        <span class="path-pill active">${index + 1}. ${hop.toUpperCase()}</span>
+    `).join('');
+}
+
+function updateTopologySelection(running, path = [], nodeStatus = {}) {
+    const baseNodes = ['node-h1', 'node-s1', 'node-s2', 'node-h2'];
+    baseNodes.forEach(id => {
+        const el = byId(id);
+        if (el) {
+            el.classList.toggle('active', running);
+            el.classList.remove('selected');
+        }
+    });
+
+    ['link-1', 'link-2', 'link-3'].forEach(id => {
+        const el = byId(id);
+        if (el) el.classList.toggle('active', running);
+    });
+
+    ['fw', 'ids', 'lb'].forEach(name => {
+        const node = byId(`node-${name}`);
+        const branch = byId(`branch-${name}`);
+        const isRunning = nodeStatus[name]?.status === 'running';
+        const inPath = path.includes(name);
+
+        if (node) {
+            node.classList.toggle('active', isRunning);
+            node.classList.toggle('selected', inPath);
+        }
+
+        if (branch) {
+            branch.classList.toggle('active', inPath || isRunning);
+        }
+    });
+
+    path.forEach(hop => {
+        const node = byId(`node-${hop}`);
+        if (node) node.classList.add('selected');
+    });
+
+    const playbackTrack = byId('playback-track');
+    if (playbackTrack) playbackTrack.classList.toggle('active', running && path.length > 0);
+}
+
+function updateIncidents(incidents = []) {
+    const container = byId('incident-list');
+    if (!container) return;
+
+    if (!incidents.length) {
+        container.innerHTML = '<div class="text-muted small">No incidents detected yet.</div>';
+        return;
+    }
+
+    container.innerHTML = incidents.slice(0, 5).map(incident => `
+        <div class="incident-item ${incident.severity}">
+            <div class="incident-title">${incident.title}</div>
+            <div class="incident-time">${incident.time_label} · ${incident.severity}</div>
+        </div>
+    `).join('');
+}
+
+function updatePolicyBadge(activePolicy) {
+    const badge = byId('policy-status-badge');
+    if (!badge) return;
+
+    if (!activePolicy) {
+        badge.className = 'badge-pill badge-stopped';
+        badge.innerHTML = '<span class="pulse pulse-red"></span> Idle';
+        return;
+    }
+
+    if (activePolicy.status === 'fallback') {
+        badge.className = 'badge-pill badge-info';
+        badge.innerHTML = '<span class="pulse pulse-yellow"></span> Fallback';
+        return;
+    }
+
+    badge.className = 'badge-pill badge-running';
+    badge.innerHTML = '<span class="pulse pulse-green"></span> Active';
+}
+
+function updateVnfs(vnfs = []) {
+    const running = vnfs.filter(v => v.status === 'running');
+    const vnfBadge = byId('vnf-badge');
+    const vnfList = byId('vnf-list');
+
+    if (vnfBadge) {
+        if (running.length) {
+            vnfBadge.className = 'badge-pill badge-running';
+            vnfBadge.innerHTML = `<span class="pulse pulse-green"></span> ${running.length} Active`;
+        } else {
+            vnfBadge.className = 'badge-pill badge-stopped';
+            vnfBadge.innerHTML = '<span class="pulse pulse-red"></span> None';
+        }
+    }
+
+    if (vnfList) {
+        if (running.length) {
+            vnfList.innerHTML = running.map(v => `
+                <div class="info-row">
+                    <div>
+                        <div style="font-size:.8rem; font-weight:600;">${v.label || v.name}</div>
+                        <div style="font-size:.68rem; color:var(--muted); font-family:'IBM Plex Mono',monospace;">
+                            ${v.name} · ${v.ip || 'unknown'} · ${v.role || 'vnf'}
+                        </div>
+                    </div>
+                    <span class="badge-pill badge-running" style="font-size:.62rem;">Running</span>
+                </div>
+            `).join('');
+        } else {
+            vnfList.innerHTML = '<div class="empty-state-copy">No containers deployed yet.</div>';
+        }
+    }
+
+    setText('sidebar-vnf-count', `${running.length}`);
+}
+
+function updateController(data) {
+    const controllerName = data.sdn_controller.name || 'Ryu OpenFlow 1.3';
+    const controllerMode = data.sdn_controller.mode_label || 'Local';
+    const controllerRestApi = data.sdn_controller.rest_api || '127.0.0.1:8080';
+    const controllerOpenFlow = data.sdn_controller.openflow_endpoint || '127.0.0.1:6653';
+    const ctrlActive = data.sdn_controller.active;
+    const ctrlBadge = byId('ctrl-live-badge');
+
+    setText('kpi-ctrl-value', ctrlActive ? `${data.sdn_controller.switches_connected} SW` : '—');
+    setText(
+        'kpi-ctrl-sub',
+        ctrlActive
+            ? `${controllerMode} · ${data.sdn_controller.switches_connected} switch(es) connected`
+            : `${controllerMode} mode · controller offline`
+    );
+
+    if (ctrlBadge) {
+        if (ctrlActive) {
+            ctrlBadge.className = 'badge-pill badge-running';
+            ctrlBadge.innerHTML = '<span class="pulse pulse-green"></span> Online';
+        } else {
+            ctrlBadge.className = 'badge-pill badge-stopped';
+            ctrlBadge.innerHTML = '<span class="pulse pulse-red"></span> Offline';
+        }
+    }
+
+    setText('ctrl-switches', ctrlActive ? `${data.sdn_controller.switches_connected} connected` : '0 connected');
+    setText('ctrl-flows', data.sdn_controller.total_flows);
+    setText('ctrl-controller-name', controllerName);
+    setText('ctrl-mode', `${controllerMode} mode`);
+    setText('ctrl-rest-api', controllerRestApi);
+    setText('ctrl-openflow', controllerOpenFlow);
+    setText('sidebar-controller-status', ctrlActive ? 'Online' : 'Offline');
+}
+
+function updateSystem(system) {
+    if (!system) return;
+
+    const cpuBar = byId('cpu-bar');
+    if (cpuBar) {
+        cpuBar.style.width = `${system.cpu_percent}%`;
+        cpuBar.style.background = system.cpu_percent > 80
+            ? 'var(--red)'
+            : system.cpu_percent > 50
+                ? 'var(--yellow)'
+                : 'var(--accent)';
+    }
+    setText('cpu-text', `${system.cpu_percent.toFixed(1)}%`);
+
+    const ramBar = byId('ram-bar');
+    if (ramBar) {
+        ramBar.style.width = `${system.memory_percent}%`;
+        ramBar.style.background = system.memory_percent > 85 ? 'var(--red)' : 'var(--yellow)';
+    }
+    setText('ram-text', `${system.memory_percent.toFixed(1)}%  (${system.memory_used_mb} MB / ${system.memory_total_mb} MB)`);
 }
 
 function updateUI(data) {
-    // ── KPI Boxes ──
     const running = data.topology.status === 'Running';
-    document.getElementById('kpi-topo-status').innerText = running ? 'ON' : 'OFF';
-    document.getElementById('kpi-topo-status').style.color = running ? 'var(--green)' : 'var(--red)';
-    document.getElementById('kpi-topo-detail').innerText = running
-        ? `Hosts: ${data.topology.details?.Hosts || 3}, Switches: ${data.topology.details?.Switches || 2}`
-        : 'Stopped';
+    const orchestrator = data.orchestrator || {};
+    const activePolicy = orchestrator.active_policy;
+    const telemetry = orchestrator.telemetry || {};
+    const traffic = telemetry.traffic || {};
+    const nodeStatus = telemetry.node_status || {};
+    const runningVnfs = (data.vnfs || []).filter(v => v.status === 'running').length;
 
-    const ctrlActive = data.sdn_controller.active;
-    document.getElementById('kpi-ctrl-value').innerText = ctrlActive
-        ? `${data.sdn_controller.switches_connected} SW`
-        : '—';
-    document.getElementById('kpi-ctrl-sub').innerText = ctrlActive
-        ? `${data.sdn_controller.switches_connected} switch(es) connected`
-        : 'Controller offline';
-
-    const totalFlows = data.sdn_controller.total_flows;
-    document.getElementById('kpi-flows').innerText = totalFlows;
-    const runningVnfs = data.vnfs.filter(v => v.status === 'running').length;
-    document.getElementById('kpi-vnfs').innerText = runningVnfs;
-
-    // ── Topology Badge ──
-    const badgeTopo = document.getElementById('badge-topo');
-    const dotTopo   = document.getElementById('dot-topo');
-    const badgeText = document.getElementById('badge-topo-text');
-    if (running) {
-        badgeTopo.className = 'badge-pill badge-running';
-        dotTopo.className = 'pulse pulse-green';
-        badgeText.innerText = 'Running';
-    } else {
-        badgeTopo.className = 'badge-pill badge-stopped';
-        dotTopo.className = 'pulse pulse-red';
-        badgeText.innerText = 'Stopped';
+    const topoStatus = byId('kpi-topo-status');
+    if (topoStatus) {
+        topoStatus.innerText = running ? 'ON' : 'OFF';
+        topoStatus.style.color = running ? 'var(--green)' : 'var(--red)';
     }
 
-    // ── Topology Nodes ──
-    ['node-h1','node-s1','node-s2','node-h2'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.toggle('active', running);
-    });
-    ['link-1','link-2','link-3'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.toggle('active', running);
-    });
-    
-    // VNF Node and Line
-    const fwRunning = runningVnfs > 0;
-    const fwNode = document.getElementById('node-fw');
-    if (fwNode) fwNode.classList.toggle('active', fwRunning);
-    
-    const vnfLine = document.getElementById('vnf-line');
-    if (vnfLine) vnfLine.classList.toggle('active', fwRunning);
+    setText(
+        'kpi-topo-detail',
+        running
+            ? `Hosts: ${data.topology.details?.Hosts || 5}, Switches: ${data.topology.details?.Switches || 2}`
+            : 'Stopped'
+    );
+    setText('kpi-flows', data.sdn_controller.total_flows);
+    setText('kpi-vnfs', runningVnfs);
 
-    // Flow path indicator
-    const flowInd = document.getElementById('flow-path-indicator');
-    if (flowInd) flowInd.style.display = (running && totalFlows > 0) ? 'block' : 'none';
-
-    // ── Controller Card ──
-    const ctrlBadge = document.getElementById('ctrl-live-badge');
-    if (ctrlActive) {
-        ctrlBadge.className = 'badge-pill badge-running';
-        ctrlBadge.innerHTML = '<span class="pulse pulse-green"></span> Online';
-    } else {
-        ctrlBadge.className = 'badge-pill badge-stopped';
-        ctrlBadge.innerHTML = '<span class="pulse pulse-red"></span> Offline';
-    }
-    document.getElementById('ctrl-switches').innerText = ctrlActive
-        ? `${data.sdn_controller.switches_connected} connected` : '0 connected';
-    document.getElementById('ctrl-flows').innerText = totalFlows;
-
-    // ── VNF List ──
-    const vnfList   = document.getElementById('vnf-list');
-    const vnfBadge  = document.getElementById('vnf-badge');
-    if (runningVnfs > 0) {
-        vnfBadge.className = 'badge-pill badge-running';
-        vnfBadge.innerHTML = `<span class="pulse pulse-green"></span> ${runningVnfs} Active`;
-        vnfList.innerHTML = data.vnfs
-            .filter(v => v.status === 'running')
-            .map(v => `
-            <div class="info-row">
-                <div>
-                    <div style="font-size:.8rem; font-weight:600;">🐳 ${v.name || v.id}</div>
-                    <div style="font-size:.68rem; color:var(--muted); font-family:'JetBrains Mono',monospace;">ID: ${v.short_id || v.id}</div>
-                </div>
-                <span class="badge-pill badge-running" style="font-size:.62rem;">Running</span>
-            </div>`).join('');
-    } else {
-        vnfBadge.className = 'badge-pill badge-stopped';
-        vnfBadge.innerHTML = '<span class="pulse pulse-red"></span> None';
-        vnfList.innerHTML = '<div style="color:var(--muted);font-size:.8rem;text-align:center;padding:.5rem 0;">No containers deployed yet.</div>';
+    const badgeTopo = byId('badge-topo');
+    const dotTopo = byId('dot-topo');
+    const badgeText = byId('badge-topo-text');
+    if (badgeTopo && dotTopo && badgeText) {
+        if (running) {
+            badgeTopo.className = 'badge-pill badge-running';
+            dotTopo.className = 'pulse pulse-green';
+            badgeText.innerText = 'Running';
+        } else {
+            badgeTopo.className = 'badge-pill badge-stopped';
+            dotTopo.className = 'pulse pulse-red';
+            badgeText.innerText = 'Stopped';
+        }
     }
 
-    // ── System Resources ──
-    if (data.system) {
-        const cpu = data.system.cpu_percent;
-        const ram = data.system.memory_percent;
+    updateController(data);
+    updateVnfs(data.vnfs || []);
+    updateSystem(data.system);
+    updatePolicyBadge(activePolicy);
 
-        document.getElementById('cpu-bar').style.width = cpu + '%';
-        document.getElementById('cpu-bar').style.background = cpu > 80 ? 'var(--red)' : cpu > 50 ? 'var(--yellow)' : 'var(--accent)';
-        document.getElementById('cpu-text').innerText = cpu.toFixed(1) + '%';
+    setText('active-policy-label', activePolicy ? activePolicy.label : 'None');
+    setText('observed-packets', traffic.packets || 0);
+    setText('observed-bytes', formatBytes(traffic.bytes || 0));
+    setText('observed-rules', traffic.rule_count || 0);
+    setText('kpi-flow-caption', activePolicy ? `${activePolicy.label} active` : 'Policy flow rules installed');
+    setText(
+        'kpi-vnfs-caption',
+        activePolicy ? `${(activePolicy.chain || []).length} service hop(s)` : 'Containers active'
+    );
 
-        document.getElementById('ram-bar').style.width = ram + '%';
-        document.getElementById('ram-bar').style.background = ram > 85 ? 'var(--red)' : 'var(--yellow)';
-        document.getElementById('ram-text').innerText = `${ram.toFixed(1)}%  (${data.system.memory_used_mb} MB / ${data.system.memory_total_mb} MB)`;
+    const path = traffic.active_path || activePolicy?.path || [];
+    renderPathPills(path);
+    updateTopologySelection(running, path, nodeStatus);
+    updateIncidents(orchestrator.incidents || []);
+    syncServerEvents(orchestrator.events || []);
+
+    setText(
+        'flow-path-text',
+        path.length ? `Active path: ${path.join(' → ')}` : 'Waiting for active policy...'
+    );
+    setText(
+        'observatory-footnote',
+        activePolicy
+            ? `Status: ${activePolicy.status} · Installed at ${activePolicy.installed_label}`
+            : 'Packet playback is synced with the currently selected service path.'
+    );
+
+    setText('sidebar-topology-status', running ? 'Running' : 'Stopped');
+    setText('sidebar-policy-status', activePolicy ? activePolicy.label : 'Idle');
+}
+
+async function fetchPolicies() {
+    const select = byId('policy-select');
+    if (!select) return;
+
+    try {
+        const res = await fetch('/api/policies');
+        const policies = await res.json();
+        select.innerHTML = policies.map(policy => `
+            <option value="${policy.key}">${policy.label}</option>
+        `).join('');
+    } catch (error) {
+        console.warn('Policy fetch failed:', error);
     }
 }
 
-// ── OpenFlow Table Modal ──
-async function fetchFlowDetails() {
-    const container = document.getElementById('flow-table-container');
-    container.innerHTML = '<div class="text-center py-5 text-muted">Fetching rules from Ryu controller…</div>';
+async function fetchStats() {
     try {
-        const res  = await fetch('/api/flow/details');
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        updateUI(data);
+    } catch (error) {
+        console.warn('Stats fetch failed:', error);
+    }
+}
+
+async function deployVnf(name, role, label) {
+    setLoading(true);
+    setHint(`Deploying ${label} VNF...`);
+    addLog(`Deploying ${label} VNF...`, 'info');
+
+    try {
+        const data = await postJson('/api/vnf/deploy', { name, role });
+        addLog(data.message, data.status === 'success' ? 'success' : 'error');
+        setHint(data.status === 'success' ? `${label} VNF ready.` : data.message);
+        await fetchStats();
+    } finally {
+        setLoading(false);
+    }
+}
+
+bindIfPresent('btn-start-topo', 'click', async () => {
+    setLoading(true);
+    setHint('Starting Mininet topology, please wait...');
+    addLog('Requesting topology start...', 'info');
+
+    try {
+        const data = await postJson('/api/topology/start');
+        addLog(data.message, data.status === 'success' ? 'success' : 'error');
+        setHint(data.status === 'success'
+            ? 'Topology running. Compose a policy and observe the service path.'
+            : data.message);
+        await fetchStats();
+    } finally {
+        setLoading(false);
+    }
+});
+
+bindIfPresent('btn-stop-topo', 'click', async () => {
+    setLoading(true);
+    setHint('Stopping topology...');
+    addLog('Requesting topology stop...', 'info');
+
+    try {
+        const data = await postJson('/api/topology/stop');
+        addLog(data.message, data.status === 'success' ? 'success' : 'error');
+        setHint(data.status === 'success' ? 'Topology stopped. Press Start Topology to restart.' : data.message);
+        await fetchStats();
+    } finally {
+        setLoading(false);
+    }
+});
+
+bindIfPresent('btn-deploy-fw', 'click', () => deployVnf('fw', 'firewall', 'Firewall'));
+bindIfPresent('btn-deploy-ids', 'click', () => deployVnf('ids', 'ids', 'IDS'));
+bindIfPresent('btn-deploy-lb', 'click', () => deployVnf('lb', 'load_balancer', 'Load Balancer'));
+
+bindIfPresent('btn-apply-policy', 'click', async () => {
+    const policy = byId('policy-select')?.value;
+    if (!policy) return;
+
+    setLoading(true);
+    setHint('Applying selected service chain...');
+    addLog(`Applying policy '${policy}'...`, 'info');
+
+    try {
+        const data = await postJson('/api/policy/apply', { policy, auto_deploy: true });
+        addLog(data.message, data.status === 'success' ? 'success' : 'error');
+        setHint(data.status === 'success'
+            ? `Policy ${data.policy.label} active.`
+            : data.message);
+        await fetchStats();
+    } finally {
+        setLoading(false);
+    }
+});
+
+bindIfPresent('btn-scenario-kill', 'click', async () => {
+    setLoading(true);
+    setHint('Injecting VNF failure scenario...');
+    addLog('Triggering scenario: kill active VNF.', 'info');
+
+    try {
+        const data = await postJson('/api/scenario/trigger', { scenario: 'kill_active_vnf' });
+        addLog(data.message, data.status === 'success' ? 'warning' : 'error');
+        setText('scenario-note', data.message);
+        await fetchStats();
+    } finally {
+        setLoading(false);
+    }
+});
+
+bindIfPresent('btn-scenario-fallback', 'click', async () => {
+    setLoading(true);
+    setHint('Forcing direct fallback...');
+    addLog('Triggering scenario: direct fallback.', 'info');
+
+    try {
+        const data = await postJson('/api/scenario/trigger', { scenario: 'fallback_direct' });
+        addLog(data.message, data.status === 'success' ? 'warning' : 'error');
+        setText('scenario-note', data.message);
+        await fetchStats();
+    } finally {
+        setLoading(false);
+    }
+});
+
+bindIfPresent('btn-scenario-recover', 'click', async () => {
+    setLoading(true);
+    setHint('Recovering last chained policy...');
+    addLog('Triggering scenario: recover last policy.', 'info');
+
+    try {
+        const data = await postJson('/api/scenario/trigger', { scenario: 'recover_policy' });
+        addLog(data.message, data.status === 'success' ? 'success' : 'error');
+        setText('scenario-note', data.message);
+        await fetchStats();
+    } finally {
+        setLoading(false);
+    }
+});
+
+async function fetchFlowDetails() {
+    const container = byId('flow-table-container');
+    if (!container) return;
+
+    container.innerHTML = '<div class="text-center py-5 text-muted">Fetching rules from SDN controller…</div>';
+
+    try {
+        const res = await fetch('/api/flow/details');
         const data = await res.json();
 
         if (Object.keys(data).length === 0) {
@@ -253,28 +535,34 @@ async function fetchFlowDetails() {
                 <tbody style="border-color:var(--border);">`;
 
             flows.sort((a, b) => b.priority - a.priority).forEach(flow => {
-                const matchStr = Object.entries(flow.match).map(([k, v]) => `<span style="color:var(--yellow);">${k}</span>=<span style="color:#f8fafc;">${v}</span>`).join(' · ') || '<em>ANY</em>';
+                const matchStr = Object.entries(flow.match)
+                    .map(([k, v]) => `<span style="color:var(--yellow);">${k}</span>=<span style="color:#f8fafc;">${v}</span>`)
+                    .join(' · ') || '<em>ANY</em>';
                 const actionStr = (flow.actions || []).join(', ') || '<span style="color:var(--red);">DROP</span>';
+
                 html += `<tr style="border-color:var(--border);">
                     <td><span class="badge-pill badge-info" style="font-size:.65rem;">${flow.priority}</span></td>
-                    <td style="font-family:'JetBrains Mono',monospace; font-size:.72rem; max-width: 280px; word-break:break-all;">${matchStr}</td>
-                    <td style="color:var(--green); font-family:'JetBrains Mono',monospace; font-size:.72rem;">${actionStr}</td>
+                    <td style="font-family:'IBM Plex Mono',monospace; font-size:.72rem; max-width: 280px; word-break:break-all;">${matchStr}</td>
+                    <td style="color:var(--green); font-family:'IBM Plex Mono',monospace; font-size:.72rem;">${actionStr}</td>
                     <td>${flow.packet_count ?? '—'}</td>
                     <td>${flow.byte_count ?? '—'}</td>
                 </tr>`;
             });
-            html += `</tbody></table></div>`;
+
+            html += '</tbody></table></div>';
         }
+
         container.innerHTML = html;
-    } catch (e) {
-        container.innerHTML = `<div class="alert alert-danger m-3">Error fetching flows: ${e.message}</div>`;
+    } catch (error) {
+        container.innerHTML = `<div class="alert alert-danger m-3">Error fetching flows: ${error.message}</div>`;
     }
 }
 
-document.getElementById('flowModal').addEventListener('show.bs.modal', fetchFlowDetails);
-document.getElementById('btn-refresh-flows').addEventListener('click', fetchFlowDetails);
+bindIfPresent('flowModal', 'show.bs.modal', fetchFlowDetails);
+bindIfPresent('btn-refresh-flows', 'click', fetchFlowDetails);
 
-// ── Init ──
+initTooltips();
 setInterval(fetchStats, 3000);
+fetchPolicies();
 fetchStats();
-addLog('Dashboard initialized. Polling every 3 seconds.', 'info');
+addLog('Workspace initialized. Polling every 3 seconds.', 'info');

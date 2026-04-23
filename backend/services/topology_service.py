@@ -3,9 +3,29 @@ import subprocess
 import time
 import signal
 
-PID_FILE = '/tmp/mininet_topo.pid'
-STATUS_FILE = '/tmp/mininet_status.txt'
+RUNTIME_DIR_ENV = 'ORCHESTRATOR_RUNTIME_DIR'
+DEFAULT_RUNTIME_DIR = os.path.join(
+    '/tmp',
+    f'web-sdn-nfv-orchestrator-uid-{os.getuid()}'
+)
 _topology_starting = False  # Lock flag
+
+
+def _get_runtime_dir():
+    return os.getenv(RUNTIME_DIR_ENV, DEFAULT_RUNTIME_DIR)
+
+
+def _runtime_file(name):
+    return os.path.join(_get_runtime_dir(), name)
+
+
+PID_FILE = _runtime_file('mininet_topo.pid')
+STATUS_FILE = _runtime_file('mininet_status.txt')
+LOG_FILE = _runtime_file('mininet_topo.log')
+
+
+def _ensure_runtime_dir():
+    os.makedirs(_get_runtime_dir(), mode=0o700, exist_ok=True)
 
 
 def _safe_cleanup():
@@ -58,7 +78,7 @@ def _safe_cleanup():
         )
         if result.returncode == 0:
             for line in result.stdout.split('\n'):
-                for prefix in ['s1-', 's2-', 'h1-', 'h2-', 'fw-']:
+                for prefix in ['s1-', 's2-', 'h1-', 'h2-', 'fw-', 'ids-', 'lb-']:
                     if prefix in line:
                         iface = line.split(':')[1].strip().split('@')[0] if ':' in line else ''
                         if iface:
@@ -71,10 +91,21 @@ def _safe_cleanup():
 
 
 class TopologyService:
+    @staticmethod
+    def _require_root():
+        if os.geteuid() != 0:
+            return {
+                "status": "error",
+                "message": "Topology operations require root privileges. Run the Flask backend with sudo."
+            }
+        return None
 
     @staticmethod
     def start_topology():
         global _topology_starting
+        root_error = TopologyService._require_root()
+        if root_error:
+            return root_error
         if _topology_starting:
             return {"status": "error", "message": "Topology is already starting, please wait..."}
         _topology_starting = True
@@ -89,13 +120,17 @@ class TopologyService:
             topo_path = os.path.abspath(
                 os.path.join(os.path.dirname(__file__), '../../mininet/topo.py')
             )
+            _ensure_runtime_dir()
 
             # Launch topo.py as a background process (detached)
-            log_file = open('/tmp/mininet_topo.log', 'w')
+            log_file = open(LOG_FILE, 'w')
+            child_env = os.environ.copy()
+            child_env[RUNTIME_DIR_ENV] = _get_runtime_dir()
             proc = subprocess.Popen(
                 ["python3", topo_path],
                 stdout=log_file,
                 stderr=log_file,
+                env=child_env,
                 preexec_fn=os.setsid  # detach from parent process group
             )
 
@@ -108,7 +143,7 @@ class TopologyService:
             if proc.poll() is not None:
                 # Process already exited - read the log for the error
                 log_file.close()
-                with open('/tmp/mininet_topo.log', 'r') as lf:
+                with open(LOG_FILE, 'r') as lf:
                     log_content = lf.read()[-500:]
                 _topology_starting = False
                 return {"status": "error", "message": f"Topology crashed on startup. Log: {log_content}"}
@@ -123,6 +158,9 @@ class TopologyService:
 
     @staticmethod
     def stop_topology():
+        root_error = TopologyService._require_root()
+        if root_error:
+            return root_error
         try:
             TopologyService._kill_existing()
             time.sleep(1)
