@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDN + NFV Orchestrator</title>
+    <meta name="description" content="Real-time SDN and NFV management dashboard for dynamic service chaining.">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<!-- ── TOP NAVIGATION ── -->
+<nav class="topbar">
+    <div class="topbar-brand">
+        <div class="brand-icon">🌐</div>
+        <div>
+            <div class="brand-title">SDN + NFV Orchestrator</div>
+            <div class="brand-sub">Dynamic Service Chaining Prototype</div>
+        </div>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+        <span class="live-tag"><span class="pulse pulse-green"></span>Live</span>
+        <div class="topbar-time" id="clock">--:--:--</div>
+    </div>
+</nav>
+
+<div class="dashboard-wrap mt-4">
+
+    <!-- ── KPI ROW ── -->
+    <div class="kpi-grid mb-4">
+        <div class="kpi-box" style="--kpi-accent: #3b82f6;">
+            <div class="kpi-label">Topology</div>
+            <div class="kpi-value text-info" id="kpi-topo-status">OFF</div>
+            <div class="kpi-sub" id="kpi-topo-detail">—</div>
+            <div class="kpi-icon">🗺️</div>
+        </div>
+        <div class="kpi-box" style="--kpi-accent: #10b981;">
+            <div class="kpi-label">SDN Controller</div>
+            <div class="kpi-value" id="kpi-ctrl-value" style="color: var(--green);">—</div>
+            <div class="kpi-sub" id="kpi-ctrl-sub">Ryu OpenFlow 1.3</div>
+            <div class="kpi-icon">🧠</div>
+        </div>
+        <div class="kpi-box" style="--kpi-accent: #22d3ee;">
+            <div class="kpi-label">Active Flows</div>
+            <div class="kpi-value text-warning" id="kpi-flows">0</div>
+            <div class="kpi-sub">Flow rules installed</div>
+            <div class="kpi-icon">🔀</div>
+        </div>
+        <div class="kpi-box" style="--kpi-accent: #a855f7;">
+            <div class="kpi-label">Running VNFs</div>
+            <div class="kpi-value" id="kpi-vnfs" style="color: var(--purple);">0</div>
+            <div class="kpi-sub">Containers active</div>
+            <div class="kpi-icon">🐳</div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+
+        <!-- ══════════════════ LEFT COLUMN ══════════════════ -->
+        <div class="col-xl-8">
+
+            <!-- Network Topology Card -->
+            <div class="glass-card mb-3">
+                <div class="card-head">
+                    <span>🔗 Network Topology</span>
+                    <span id="badge-topo" class="badge-pill badge-stopped">
+                        <span class="pulse pulse-red" id="dot-topo"></span>
+                        <span id="badge-topo-text">Stopped</span>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="topo-canvas" style="position: relative;">
+                        <div class="topo-row">
+                            <div class="topo-node" id="node-h1">
+                                <div class="topo-icon">💻</div>
+                                <div class="topo-node-label">Client</div>
+                                <div class="topo-node-ip">h1 · 10.0.0.1</div>
+                            </div>
+                            <div class="topo-link" id="link-1"></div>
+                            <div class="topo-node" id="node-s1" style="position:relative;">
+                                <div class="topo-icon">🔄</div>
+                                <div class="topo-node-label">Switch S1</div>
+                                <div class="topo-node-ip">OVS · dpid:1</div>
+                                <!-- FW Branch -->
+                                <div class="topo-vnf-branch" id="vnf-branch">
+                                    <div class="topo-vnf-line" id="vnf-line"></div>
+                                    <div class="topo-node" id="node-fw">
+                                        <div class="topo-icon topo-icon-fw" style="width:54px;height:54px;font-size:1.2rem;">🛡️</div>
+                                        <div class="topo-node-label" style="color: #c084fc;">Firewall VNF</div>
+                                        <div class="topo-node-ip">fw · 10.0.0.254</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="topo-link" id="link-2"></div>
+                            <div class="topo-node" id="node-s2">
+                                <div class="topo-icon">🔄</div>
+                                <div class="topo-node-label">Switch S2</div>
+                                <div class="topo-node-ip">OVS · dpid:2</div>
+                            </div>
+                            <div class="topo-link" id="link-3"></div>
+                            <div class="topo-node" id="node-h2">
+                                <div class="topo-icon">🖥️</div>
+                                <div class="topo-node-label">Server</div>
+                                <div class="topo-node-ip">h2 · 10.0.0.2</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Flow Path Indicator -->
+                    <div class="text-center mt-1 mb-0" id="flow-path-indicator" style="display:none !important;">
+                        <span class="badge-pill badge-info" style="font-size:.7rem;">
+                            🔀 Traffic redirected: h1 → Switch S1 → Firewall → Switch S2 → h2
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control Panel -->
+            <div class="glass-card mb-3">
+                <div class="card-head">⚙️ Control Panel</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="section-title">Topology Control</div>
+                            <div class="d-flex flex-column gap-2">
+                                <button id="btn-start-topo" class="btn-ctrl btn-ctrl-primary control-btn">
+                                    🚀 Start Topology
+                                </button>
+                                <button id="btn-stop-topo" class="btn-ctrl btn-ctrl-danger control-btn">
+                                    🛑 Stop Topology
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="section-title">NFV & SDN Policy</div>
+                            <div class="d-flex flex-column gap-2">
+                                <button id="btn-deploy-fw" class="btn-ctrl btn-ctrl-green control-btn">
+                                    🛡️ Deploy Firewall (Docker)
+                                </button>
+                                <button id="btn-install-flow" class="btn-ctrl btn-ctrl-yellow control-btn">
+                                    🔗 Install Redirect Flow → FW
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status feedback bar -->
+                    <div class="div-line"></div>
+                    <div id="status-hint" style="font-size:.75rem; color: var(--muted); text-align:center;">
+                        Start the topology to begin orchestrating your network.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Log -->
+            <div class="glass-card">
+                <div class="card-head">
+                    <span>📋 Event Log</span>
+                    <button class="btn-ctrl btn-ctrl-ghost" style="width:auto; padding:.25rem .65rem;" onclick="document.getElementById('log-container').innerHTML=''">Clear</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="log-wrap" id="log-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════ RIGHT COLUMN ══════════════════ -->
+        <div class="col-xl-4">
+
+            <!-- SDN Controller Info -->
+            <div class="glass-card mb-3">
+                <div class="card-head">
+                    🧠 SDN Controller
+                    <span id="ctrl-live-badge" class="badge-pill badge-stopped"><span class="pulse pulse-red"></span> Offline</span>
+                </div>
+                <div class="card-body">
+                    <div class="info-row">
+                        <span class="info-key">Controller</span>
+                        <span class="info-val text-info">Ryu OpenFlow 1.3</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-key">REST API</span>
+                        <span class="info-val">127.0.0.1:8080</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-key">Switches</span>
+                        <span class="info-val" id="ctrl-switches">0 connected</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-key">Flow Rules</span>
+                        <span class="info-val" id="ctrl-flows">0</span>
+                    </div>
+                    <div class="div-line"></div>
+                    <button class="btn-ctrl btn-ctrl-ghost" data-bs-toggle="modal" data-bs-target="#flowModal">
+                        🔍 View OpenFlow Table
+                    </button>
+                </div>
+            </div>
+
+            <!-- VNF Status -->
+            <div class="glass-card mb-3">
+                <div class="card-head">
+                    🐳 VNF Containers
+                    <span id="vnf-badge" class="badge-pill badge-stopped"><span class="pulse pulse-red"></span> None</span>
+                </div>
+                <div class="card-body">
+                    <div id="vnf-list">
+                        <div style="color: var(--muted); font-size:.8rem; text-align:center; padding: .5rem 0;">
+                            No containers deployed yet.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Host System Resources -->
+            <div class="glass-card mb-3">
+                <div class="card-head">💻 Host System Resources</div>
+                <div class="card-body">
+                    <div class="resource-bar-wrap">
+                        <div class="resource-bar-header">
+                            <span class="resource-bar-label">CPU Usage</span>
+                            <span class="resource-bar-value" id="cpu-text">—</span>
+                        </div>
+                        <div class="resource-track">
+                            <div class="resource-fill bg-primary" id="cpu-bar" style="width:0%;"></div>
+                        </div>
+                    </div>
+                    <div class="resource-bar-wrap">
+                        <div class="resource-bar-header">
+                            <span class="resource-bar-label">RAM Usage</span>
+                            <span class="resource-bar-value" id="ram-text">—</span>
+                        </div>
+                        <div class="resource-track">
+                            <div class="resource-fill" id="ram-bar" style="width:0%; background:var(--yellow);"></div>
+                        </div>
+                    </div>
+                    <div class="div-line"></div>
+                    <div class="info-row">
+                        <span class="info-key">Environment</span>
+                        <span class="info-val text-info">Ubuntu / WSL2</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-key">Framework</span>
+                        <span class="info-val">Flask 3.0 · Python 3.12</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-key">Poll Interval</span>
+                        <span class="info-val">3 s</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Architecture Info -->
+            <div class="glass-card">
+                <div class="card-head">📚 Architecture</div>
+                <div class="card-body">
+                    <div class="info-row">
+                        <span class="info-key">Data Plane</span>
+                        <span class="info-val">Mininet + OVS</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-key">Control Plane</span>
+                        <span class="info-val text-info">Ryu SDN Controller</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-key">VNF Platform</span>
+                        <span class="info-val" style="color: #93c5fd;">Docker Containers</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-key">Protocol</span>
+                        <span class="info-val">OpenFlow 1.3</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-key">Orchestrator</span>
+                        <span class="info-val" style="color: var(--green);">Flask REST API</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ FLOW TABLE MODAL ═══════════════ -->
+<div class="modal fade" id="flowModal" tabindex="-1" aria-labelledby="flowModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content modal-dark">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="flowModalLabel">🔀 OpenFlow Rule Table</h5>
+                    <div style="font-size:.72rem; color:var(--muted); margin-top:.2rem;">Live view of flow rules installed in OVS switches via Ryu REST API</div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="background:#070d1a;">
+                <div id="flow-table-container">
+                    <div class="text-center py-5 text-muted">Fetching rules from Ryu…</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-ctrl btn-ctrl-ghost" style="width:auto;" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn-ctrl btn-ctrl-primary" style="width:auto;" id="btn-refresh-flows">↻ Refresh</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
