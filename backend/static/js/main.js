@@ -405,7 +405,12 @@ function updateUI(data) {
     setText('observed-packets', traffic.packets || 0);
     setText('observed-bytes', formatBytes(traffic.bytes || 0));
     setText('observed-rules', traffic.rule_count || 0);
-    setText('kpi-flow-caption', activePolicy ? `${activePolicy.label} active` : 'Policy flow rules installed');
+    setText(
+        'kpi-flow-caption',
+        activePolicy
+            ? `${activePolicy.label} active · ${traffic.source || 'openflow'}`
+            : 'Policy flow rules installed'
+    );
     setText(
         'kpi-vnfs-caption',
         activePolicy ? `${(activePolicy.chain || []).length} service hop(s)` : 'Containers active'

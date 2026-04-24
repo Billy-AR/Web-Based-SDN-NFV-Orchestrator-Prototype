@@ -7,6 +7,7 @@ from .vnf_service import VNFService
 
 
 class OrchestratorService:
+    SIMULATED_BYTES_PER_REQUEST = 768
     _events = deque(maxlen=80)
     _incidents = deque(maxlen=20)
     _event_seq = 0
@@ -99,14 +100,25 @@ class OrchestratorService:
                 "bytes": 0,
                 "rule_count": 0,
                 "active_path": ["h1", "s1", "s2", "h2"],
+                "source": "none",
             }
 
         snapshot = RyuService.get_policy_flow_snapshot(cls._active_policy["key"])
+        packets = snapshot["packets"]
+        byte_count = snapshot["bytes"]
+        source = "openflow"
+
+        if cls._active_policy["key"] == "load_balancer" and cls._load_balancer_simulation:
+            packets += cls._load_balancer_simulation.get("simulated_packets", 0)
+            byte_count += cls._load_balancer_simulation.get("simulated_bytes", 0)
+            source = "openflow+simulation" if snapshot["packets"] else "simulation"
+
         return {
-            "packets": snapshot["packets"],
-            "bytes": snapshot["bytes"],
+            "packets": packets,
+            "bytes": byte_count,
             "rule_count": len(snapshot["rules"]),
             "active_path": cls._active_policy["path"],
+            "source": source,
         }
 
     @classmethod
@@ -148,6 +160,8 @@ class OrchestratorService:
             "total_requests": request_count,
             "handled_requests": request_count,
             "dropped_requests": 0,
+            "simulated_packets": request_count,
+            "simulated_bytes": request_count * cls.SIMULATED_BYTES_PER_REQUEST,
             "peak_rps": peak_rps,
             "virtual_ip": RyuService.HOST_IPS["lb"],
             "backend_pool": backend_pool,
