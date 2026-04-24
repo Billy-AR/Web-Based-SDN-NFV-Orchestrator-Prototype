@@ -166,6 +166,78 @@ function updateIncidents(incidents = []) {
     `).join('');
 }
 
+function updateLoadBalancerSimulation(simulation) {
+    const badge = byId('lb-simulation-badge');
+    const panel = byId('lb-simulation-panel');
+    if (!badge && !panel) return;
+
+    if (!simulation) {
+        if (badge) {
+            badge.className = 'badge-pill badge-stopped';
+            badge.innerHTML = '<span class="pulse pulse-red"></span> Idle';
+        }
+        if (panel) {
+            panel.className = 'empty-state-copy';
+            panel.innerHTML = 'Run "Simulate LB Request Spike" to apply the load-balancer policy and distribute synthetic requests across backend servers.';
+        }
+        return;
+    }
+
+    if (badge) {
+        badge.className = simulation.active ? 'badge-pill badge-running' : 'badge-pill badge-info';
+        badge.innerHTML = simulation.active
+            ? '<span class="pulse pulse-green"></span> Active'
+            : '<span class="pulse pulse-yellow"></span> Last Run';
+    }
+
+    if (!panel) return;
+
+    const backends = simulation.backend_pool || [];
+    panel.className = 'lb-simulation';
+    panel.innerHTML = `
+        <div class="lb-simulation-summary">
+            <div class="metric-card">
+                <span class="metric-label">Requests</span>
+                <span class="metric-value">${simulation.total_requests || 0}</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Clients</span>
+                <span class="metric-value">${simulation.client_count || 0}</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Peak RPS</span>
+                <span class="metric-value">${simulation.peak_rps || 0}</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Dropped</span>
+                <span class="metric-value">${simulation.dropped_requests || 0}</span>
+            </div>
+        </div>
+        <div class="lb-simulation-meta">
+            <span>Algorithm: ${(simulation.algorithm || 'round_robin').replace(/_/g, ' ')}</span>
+            <span>VIP: ${simulation.virtual_ip || '10.0.0.252'}</span>
+            <span>Generated: ${simulation.generated_label || '—'}</span>
+        </div>
+        <div class="lb-backend-list">
+            ${backends.map(backend => `
+                <div class="lb-backend-row">
+                    <div class="lb-backend-head">
+                        <div>
+                            <div class="lb-backend-name">${backend.name}</div>
+                            <div class="lb-backend-ip">${backend.ip} · ${backend.status}</div>
+                        </div>
+                        <div class="lb-backend-count">${backend.requests} req · ${backend.share_percent}%</div>
+                    </div>
+                    <div class="lb-share-track">
+                        <div class="lb-share-fill" style="width:${backend.share_percent}%;"></div>
+                    </div>
+                    <div class="lb-backend-latency">${backend.latency_ms} ms estimated latency</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
 function updatePolicyBadge(activePolicy) {
     const badge = byId('policy-status-badge');
     if (!badge) return;
@@ -211,7 +283,12 @@ function updateVnfs(vnfs = []) {
                             ${v.name} · ${v.ip || 'unknown'} · ${v.role || 'vnf'}
                         </div>
                     </div>
-                    <span class="badge-pill badge-running" style="font-size:.62rem;">Running</span>
+                    <div class="vnf-row-actions">
+                        <span class="badge-pill badge-running" style="font-size:.62rem;">Running</span>
+                        <button class="btn-ctrl btn-ctrl-danger btn-ctrl-mini control-btn" data-stop-vnf="${v.name}" data-stop-vnf-label="${v.label || v.name}">
+                            Stop
+                        </button>
+                    </div>
                 </div>
             `).join('');
         } else {
@@ -286,6 +363,7 @@ function updateUI(data) {
     const telemetry = orchestrator.telemetry || {};
     const traffic = telemetry.traffic || {};
     const nodeStatus = telemetry.node_status || {};
+    const loadBalancerSimulation = telemetry.load_balancer_simulation;
     const runningVnfs = (data.vnfs || []).filter(v => v.status === 'running').length;
 
     const topoStatus = byId('kpi-topo-status');
@@ -337,6 +415,7 @@ function updateUI(data) {
     renderPathPills(path);
     updateTopologySelection(running, path, nodeStatus);
     updateIncidents(orchestrator.incidents || []);
+    updateLoadBalancerSimulation(loadBalancerSimulation);
     syncServerEvents(orchestrator.events || []);
 
     setText(
@@ -394,6 +473,21 @@ async function deployVnf(name, role, label) {
     }
 }
 
+async function stopVnf(name, label) {
+    setLoading(true);
+    setHint(`Stopping ${label} VNF...`);
+    addLog(`Stopping ${label} VNF...`, 'warning');
+
+    try {
+        const data = await postJson('/api/vnf/stop', { name });
+        addLog(data.message, data.status === 'success' ? 'success' : 'error');
+        setHint(data.status === 'success' ? `${label} VNF stopped.` : data.message);
+        await fetchStats();
+    } finally {
+        setLoading(false);
+    }
+}
+
 bindIfPresent('btn-start-topo', 'click', async () => {
     setLoading(true);
     setHint('Starting Mininet topology, please wait...');
@@ -429,6 +523,34 @@ bindIfPresent('btn-stop-topo', 'click', async () => {
 bindIfPresent('btn-deploy-fw', 'click', () => deployVnf('fw', 'firewall', 'Firewall'));
 bindIfPresent('btn-deploy-ids', 'click', () => deployVnf('ids', 'ids', 'IDS'));
 bindIfPresent('btn-deploy-lb', 'click', () => deployVnf('lb', 'load_balancer', 'Load Balancer'));
+bindIfPresent('btn-stop-fw', 'click', () => stopVnf('fw', 'Firewall'));
+bindIfPresent('btn-stop-ids', 'click', () => stopVnf('ids', 'IDS'));
+bindIfPresent('btn-stop-lb', 'click', () => stopVnf('lb', 'Load Balancer'));
+
+document.addEventListener('click', event => {
+    const button = event.target.closest('[data-stop-vnf]');
+    if (!button) return;
+    stopVnf(button.dataset.stopVnf, button.dataset.stopVnfLabel || button.dataset.stopVnf);
+});
+
+bindIfPresent('btn-scenario-lb-spike', 'click', async () => {
+    setLoading(true);
+    setHint('Simulating a request spike through the load balancer...');
+    addLog('Triggering scenario: load balancer request spike.', 'info');
+
+    try {
+        const data = await postJson('/api/scenario/trigger', {
+            scenario: 'load_balancer_spike',
+            requests: 240,
+            clients: 24
+        });
+        addLog(data.message, data.status === 'success' ? 'success' : 'error');
+        setText('scenario-note', data.message);
+        await fetchStats();
+    } finally {
+        setLoading(false);
+    }
+});
 
 bindIfPresent('btn-apply-policy', 'click', async () => {
     const policy = byId('policy-select')?.value;

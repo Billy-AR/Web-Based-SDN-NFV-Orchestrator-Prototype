@@ -111,6 +111,33 @@ class RyuService:
             return []
 
     @staticmethod
+    def _normalize_match_key(key):
+        aliases = {
+            "eth_type": "dl_type",
+            "dl_type": "dl_type",
+        }
+        return aliases.get(key, key)
+
+    @staticmethod
+    def _normalize_match_value(value):
+        if isinstance(value, str) and value.endswith("/32"):
+            return value[:-3]
+        return value
+
+    @staticmethod
+    def _matches_flow_spec(flow, spec):
+        flow_match = flow.get("match", {})
+        expected_match = spec.get("match", {})
+
+        for key, expected_value in expected_match.items():
+            normalized_key = RyuService._normalize_match_key(key)
+            actual_value = flow_match.get(normalized_key)
+            if RyuService._normalize_match_value(actual_value) != RyuService._normalize_match_value(expected_value):
+                return False
+
+        return flow.get("priority") == spec.get("priority")
+
+    @staticmethod
     def install_flow(dpid, match, actions, priority=100, cookie=10):
         # Format required by ofctl_rest
         payload = {
@@ -273,9 +300,7 @@ class RyuService:
         total_bytes = 0
         for spec in RyuService._build_flow_specs(policy_key):
             for flow in installed:
-                if flow.get("priority") != spec["priority"]:
-                    continue
-                if flow.get("match") != spec["match"]:
+                if not RyuService._matches_flow_spec(flow, spec):
                     continue
                 total_packets += flow.get("packet_count", 0)
                 total_bytes += flow.get("byte_count", 0)

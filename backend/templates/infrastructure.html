@@ -108,6 +108,7 @@
         </div>
         <div class="card-body">
             <div class="scenario-stack">
+                <button id="btn-scenario-lb-spike" class="btn-ctrl btn-ctrl-green control-btn">Simulate LB Request Spike</button>
                 <button id="btn-scenario-kill" class="btn-ctrl btn-ctrl-danger control-btn">Kill Active VNF</button>
                 <button id="btn-scenario-fallback" class="btn-ctrl btn-ctrl-yellow control-btn">Force Direct Fallback</button>
                 <button id="btn-scenario-recover" class="btn-ctrl btn-ctrl-primary control-btn">Recover Last Policy</button>
@@ -116,6 +117,21 @@
             <div class="inline-note">
                 <span class="info-dot" aria-hidden="true">i</span>
                 <span class="scenario-note" id="scenario-note">Failure injection and recovery status.</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card span-12">
+        <div class="card-head">
+            <div class="panel-title-row">
+                <div class="panel-title">Load Balancer Simulation</div>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Synthetic high-request scenario distributed through the load balancer policy.">i</button>
+            </div>
+            <span id="lb-simulation-badge" class="badge-pill badge-stopped"><span class="pulse pulse-red"></span> Idle</span>
+        </div>
+        <div class="card-body">
+            <div id="lb-simulation-panel" class="empty-state-copy">
+                Run "Simulate LB Request Spike" to apply the load-balancer policy and distribute synthetic requests across backend servers.
             </div>
         </div>
     </div>

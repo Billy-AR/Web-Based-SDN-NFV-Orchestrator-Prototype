@@ -26,6 +26,8 @@
     --radius-xl: 28px;
     --radius-lg: 22px;
     --radius-md: 16px;
+    --sidebar-width: 280px;
+    --page-header-height: 98px;
     --mono: 'IBM Plex Mono', monospace;
     --sans: 'Space Grotesk', sans-serif;
 }
@@ -1182,7 +1184,7 @@ body::before {
 
 .app-shell {
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     min-height: 100vh;
 }
 
@@ -1289,14 +1291,20 @@ body::before {
 
 .app-main {
     min-width: 0;
+    padding-top: var(--page-header-height);
 }
 
 .topbar-page {
-    margin: 0 1.25rem;
-    padding: 1.2rem 0;
-    background: transparent;
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width);
+    right: 0;
+    z-index: 60;
+    margin: 0;
+    padding: 1.2rem 1.25rem;
+    background: rgba(5, 12, 21, 0.9);
     border-bottom: 1px solid rgba(168, 194, 255, 0.1);
-    backdrop-filter: none;
+    backdrop-filter: blur(18px);
 }
 
 .page-heading {
@@ -1393,6 +1401,206 @@ body::before {
     margin-top: 0.85rem;
 }
 
+.lb-simulation {
+    display: grid;
+    gap: 1rem;
+}
+
+.lb-simulation-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.8rem;
+}
+
+.lb-simulation-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.lb-simulation-meta span {
+    padding: 0.48rem 0.7rem;
+    border: 1px solid rgba(168, 194, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.lb-backend-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9rem;
+}
+
+.lb-backend-row {
+    padding: 1rem;
+    border: 1px solid rgba(168, 194, 255, 0.12);
+    border-radius: 18px;
+    background:
+        linear-gradient(180deg, rgba(90, 240, 177, 0.06), transparent),
+        rgba(255, 255, 255, 0.035);
+}
+
+.lb-backend-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.lb-backend-name {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.lb-backend-ip,
+.lb-backend-latency {
+    margin-top: 0.28rem;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+}
+
+.lb-backend-count {
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+.lb-share-track {
+    height: 8px;
+    margin-top: 0.85rem;
+    border-radius: 999px;
+    background: rgba(168, 194, 255, 0.12);
+    overflow: hidden;
+}
+
+.lb-share-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    box-shadow: 0 0 18px rgba(90, 240, 177, 0.18);
+}
+
+.vnf-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-ctrl-mini {
+    min-height: 30px;
+    padding: 0.42rem 0.62rem;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+}
+
+.runtime-card-compact .card-head,
+.path-card-compact .card-head {
+    padding: 0.9rem 1.1rem 0.72rem;
+}
+
+.runtime-card-compact .card-body,
+.path-card-compact .card-body {
+    padding: 0.9rem 1.1rem 1rem;
+}
+
+.runtime-card-compact .kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.7rem;
+}
+
+.runtime-card-compact .kpi-box {
+    min-height: 104px;
+    padding: 0.78rem 0.84rem 0.72rem;
+    border-radius: 16px;
+}
+
+.runtime-card-compact .kpi-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+}
+
+.runtime-card-compact .kpi-value {
+    margin-top: 0.7rem;
+    font-size: clamp(1.05rem, 2vw, 1.45rem);
+    line-height: 1.1;
+}
+
+.runtime-card-compact .kpi-sub {
+    margin-top: 0.38rem;
+    font-size: 0.68rem;
+    line-height: 1.45;
+    max-width: calc(100% - 2rem);
+}
+
+.runtime-card-compact .kpi-icon {
+    right: 0.8rem;
+    bottom: 0.72rem;
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+}
+
+.path-card-compact .badge-pill,
+.path-card-compact .path-summary .badge-pill {
+    padding: 0.36rem 0.68rem;
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+}
+
+.path-card-compact .metric-card {
+    padding: 0.78rem 0.9rem;
+    border-radius: 16px;
+}
+
+.path-card-compact .metric-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+}
+
+.path-card-compact .metric-value {
+    margin-top: 0.3rem;
+    font-size: 1rem;
+    line-height: 1.35;
+}
+
+.path-card-compact .div-line {
+    margin: 0.72rem 0;
+}
+
+.path-card-compact .inline-note {
+    gap: 0.48rem;
+    margin-top: 0;
+}
+
+.path-card-compact .status-hint {
+    font-size: 0.76rem;
+    line-height: 1.55;
+}
+
+.path-card-compact .path-summary-inline,
+.path-card-compact .path-pills-spaced {
+    margin-top: 0.72rem;
+}
+
+.path-card-compact .path-pills {
+    gap: 0.45rem;
+    min-height: 0;
+}
+
+.path-card-compact .path-pill {
+    padding: 0.36rem 0.62rem;
+    font-size: 0.68rem;
+}
+
 @keyframes riseIn {
     from {
         opacity: 0;
@@ -1432,6 +1640,10 @@ body::before {
 }
 
 @media (max-width: 1280px) {
+    :root {
+        --sidebar-width: 240px;
+    }
+
     .hero-shell,
     .workspace-grid,
     .control-layout,
@@ -1461,6 +1673,10 @@ body::before {
 }
 
 @media (max-width: 980px) {
+    :root {
+        --page-header-height: 0px;
+    }
+
     .app-shell {
         grid-template-columns: 1fr;
     }
@@ -1492,9 +1708,14 @@ body::before {
     }
 
     .topbar-page {
+        position: static;
+        left: auto;
+        right: auto;
         margin: 0 1rem;
         padding-left: 0;
         padding-right: 0;
+        background: transparent;
+        backdrop-filter: none;
     }
 
     .topbar-meta {
@@ -1504,6 +1725,15 @@ body::before {
     .hero-spec-grid,
     .kpi-grid {
         grid-template-columns: 1fr 1fr;
+    }
+
+    .runtime-card-compact .kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .lb-simulation-summary,
+    .lb-backend-list {
+        grid-template-columns: 1fr;
     }
 
     .topo-row {
@@ -1549,6 +1779,18 @@ body::before {
 
     .dashboard-wrap-page {
         padding: 1rem;
+    }
+
+    .runtime-card-compact .card-head,
+    .runtime-card-compact .card-body,
+    .path-card-compact .card-head,
+    .path-card-compact .card-body {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .runtime-card-compact .kpi-grid {
+        grid-template-columns: 1fr;
     }
 
     .hero-copy,

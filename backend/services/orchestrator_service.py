@@ -14,6 +14,7 @@ class OrchestratorService:
     _active_policy = None
     _desired_policy = None
     _last_health_issue = None
+    _load_balancer_simulation = None
 
     @staticmethod
     def _now():
@@ -109,6 +110,63 @@ class OrchestratorService:
         }
 
     @classmethod
+    def _coerce_scenario_int(cls, value, default, minimum, maximum):
+        try:
+            numeric_value = int(value)
+        except (TypeError, ValueError):
+            numeric_value = default
+        return max(minimum, min(maximum, numeric_value))
+
+    @classmethod
+    def _build_load_balancer_simulation(cls, request_count, client_count):
+        backends = [
+            {"name": "app-01", "ip": "10.0.0.2", "weight": 1},
+            {"name": "app-02", "ip": "10.0.0.3", "weight": 1},
+            {"name": "app-03", "ip": "10.0.0.4", "weight": 1},
+        ]
+        base_requests = request_count // len(backends)
+        remainder = request_count % len(backends)
+        stamp = cls._now()
+        backend_pool = []
+
+        for index, backend in enumerate(backends):
+            handled = base_requests + (1 if index < remainder else 0)
+            backend_pool.append({
+                **backend,
+                "status": "healthy",
+                "requests": handled,
+                "share_percent": round((handled / request_count) * 100, 1) if request_count else 0,
+                "latency_ms": 14 + (index * 3),
+            })
+
+        peak_rps = max(1, round(request_count / 5))
+        return {
+            "active": True,
+            "scenario": "load_balancer_spike",
+            "algorithm": "round_robin",
+            "client_count": client_count,
+            "total_requests": request_count,
+            "handled_requests": request_count,
+            "dropped_requests": 0,
+            "peak_rps": peak_rps,
+            "virtual_ip": RyuService.HOST_IPS["lb"],
+            "backend_pool": backend_pool,
+            "generated_at": stamp["iso"],
+            "generated_label": stamp["label"],
+        }
+
+    @classmethod
+    def _get_load_balancer_simulation(cls):
+        if not cls._load_balancer_simulation:
+            return None
+
+        simulation = deepcopy(cls._load_balancer_simulation)
+        simulation["active"] = bool(
+            cls._active_policy and cls._active_policy.get("key") == "load_balancer"
+        )
+        return simulation
+
+    @classmethod
     def get_runtime_state(cls):
         cls.evaluate_health()
         traffic = cls._get_traffic_metrics()
@@ -123,6 +181,7 @@ class OrchestratorService:
                 "traffic": traffic,
                 "node_status": node_status,
                 "health": cls._active_policy["status"] if cls._active_policy else "idle",
+                "load_balancer_simulation": cls._get_load_balancer_simulation(),
             },
         }
 
@@ -251,7 +310,41 @@ class OrchestratorService:
         cls.fallback_to_direct(reason=f"auto-fallback because {', '.join(missing)} is down")
 
     @classmethod
-    def trigger_scenario(cls, scenario_key):
+    def trigger_scenario(cls, scenario_key, options=None):
+        options = options or {}
+
+        if scenario_key == "load_balancer_spike":
+            request_count = cls._coerce_scenario_int(options.get("requests"), 240, 30, 5000)
+            client_count = cls._coerce_scenario_int(options.get("clients"), 24, 1, 500)
+            result = cls.apply_policy(
+                "load_balancer",
+                auto_deploy=True,
+                reason="load-balancer request spike simulation",
+            )
+            if result["status"] != "success":
+                return result
+
+            simulation = cls._build_load_balancer_simulation(request_count, client_count)
+            cls._load_balancer_simulation = simulation
+            cls.log_event(
+                (
+                    f"Scenario 'load_balancer_spike' sent {request_count} simulated "
+                    f"requests from {client_count} clients through LB {simulation['virtual_ip']}."
+                ),
+                level="success",
+                category="scenario",
+                details={"simulation": simulation},
+            )
+            return {
+                "status": "success",
+                "message": (
+                    f"Load balancer handled {request_count} simulated requests "
+                    f"across {len(simulation['backend_pool'])} backend servers."
+                ),
+                "policy": deepcopy(cls._active_policy),
+                "simulation": simulation,
+            }
+
         if scenario_key == "kill_active_vnf":
             policy = cls._active_policy or cls._desired_policy
             if not policy or not policy.get("required_vnfs"):

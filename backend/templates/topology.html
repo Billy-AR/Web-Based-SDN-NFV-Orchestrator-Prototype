@@ -97,7 +97,7 @@
         <div class="card-head">
             <div class="panel-title-row">
                 <div class="panel-title">Controls</div>
-                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Start and stop topology, deploy VNFs, and apply policies.">i</button>
+                <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Start and stop topology, deploy or stop VNFs, and apply policies.">i</button>
             </div>
         </div>
         <div class="card-body">
@@ -116,12 +116,15 @@
                 <div class="control-block">
                     <div class="panel-title-row panel-title-row-tight">
                         <div class="control-title">VNFs</div>
-                        <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Deploy service functions into the ingress branch.">i</button>
+                        <button type="button" class="info-dot info-dot-button" data-bs-toggle="tooltip" title="Deploy or stop service functions in Docker. Stop Topology does not remove VNF containers.">i</button>
                     </div>
                     <div class="control-stack">
                         <button id="btn-deploy-fw" class="btn-ctrl btn-ctrl-green control-btn">Deploy Firewall</button>
                         <button id="btn-deploy-ids" class="btn-ctrl btn-ctrl-green control-btn">Deploy IDS</button>
                         <button id="btn-deploy-lb" class="btn-ctrl btn-ctrl-green control-btn">Deploy Load Balancer</button>
+                        <button id="btn-stop-fw" class="btn-ctrl btn-ctrl-danger control-btn">Stop Firewall</button>
+                        <button id="btn-stop-ids" class="btn-ctrl btn-ctrl-danger control-btn">Stop IDS</button>
+                        <button id="btn-stop-lb" class="btn-ctrl btn-ctrl-danger control-btn">Stop Load Balancer</button>
                     </div>
                 </div>
 
@@ -152,6 +155,7 @@
         </div>
         <div class="card-body">
             <div class="scenario-stack">
+                <button id="btn-scenario-lb-spike" class="btn-ctrl btn-ctrl-green control-btn">Simulate LB Request Spike</button>
                 <button id="btn-scenario-kill" class="btn-ctrl btn-ctrl-danger control-btn">Kill Active VNF</button>
                 <button id="btn-scenario-fallback" class="btn-ctrl btn-ctrl-yellow control-btn">Force Direct Fallback</button>
                 <button id="btn-scenario-recover" class="btn-ctrl btn-ctrl-primary control-btn">Recover Last Policy</button>

@@ -130,7 +130,7 @@ def trigger_scenario():
     scenario_key = data.get('scenario')
     if not scenario_key:
         return jsonify({"status": "error", "message": "Missing scenario name"})
-    return jsonify(OrchestratorService.trigger_scenario(scenario_key))
+    return jsonify(OrchestratorService.trigger_scenario(scenario_key, options=data))
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
